@@ -2,11 +2,17 @@ from django.shortcuts import render, get_object_or_404,redirect
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+
+# prueba de paypal
+from paypal.standard.forms import PayPalPaymentsForm
+from django.urls import reverse
 # Los decoradores son funciones que se utilizan para modificar el comportamiento de una función
 # El decorador login_required lo que va a hecer es antes de ejecutar la funcion, va a verificar si el usuario esta logueado dejando entrar a la funcion pero si no lo esta, lo redirige a la pagina de login
-from .models import Categoria,Producto,Cliente
+from .models import Categoria,Producto,Cliente,Pedido,PedidoDetalle
 from .carrito import Cart
 from .forms import ClienteForm
+from django.core.mail import send_mail
+from django.conf import settings
 
 # Create your views here.
 """ VISTAS PARA MOSTRAR EL CATALOGO DE PRODUCTOS """
@@ -180,6 +186,8 @@ def actualizarCliente(request):
             # El metodo is_valid() valida los datos
             dataCliente = frmCliente.cleaned_data
             # El metodo cleaned_data prepara la data para ser guardada en la base de datos
+
+            # Actualizar Usuario
             actUsuario = User.objects.get(pk=request.user.id)
             # Se obtiene el usuario que se va a actualizar, en este caso el que esta logeado
             actUsuario.first_name = dataCliente['nombre']
@@ -235,4 +243,105 @@ def registrarPedido(request):
 
     return render(request, 'pedido.html', context)
 
+
+@login_required(login_url='/login')
+def confirmarPedido(request):
+    context = {}
+    if request.method == 'POST':
+        # Actualizamos datos de usuario
+        actUsuario = User.objects.get(pk=request.user.id)
+        actUsuario.first_name = request.POST['nombre']
+        actUsuario.last_name = request.POST['apellidos']
+        actUsuario.save()
+        # Registramos o actualizamos cliente
+        try:
+            clientePedido = Cliente.objects.get(usuario=request.user)
+            clientePedido.telefono = request.POST['telefono']
+            clientePedido.direccion = request.POST['direccion']
+            clientePedido.save()
+        except:
+            clientePedido = Cliente()
+            clientePedido.usuario = actUsuario
+            clientePedido.direccion = request.POST['direccion']
+            clientePedido.telefono = request.POST['telefono']
+            clientePedido.save()
+        # Registramos el pedido
+        nroPedido = ''
+        montoTotal = float(request.session.get('cartMontoTotal'))
+        nuevoPedido = Pedido()
+        nuevoPedido.cliente = clientePedido
+        nuevoPedido.save()
+
+        # Registramos el detalle del pedido
+        carritoPedido = request.session.get('cart')
+        for key, value in carritoPedido.items():
+            productoPedido = Producto.objects.get(pk=value['producto_id'])
+            detalle = PedidoDetalle()
+            detalle.pedido = nuevoPedido
+            detalle.producto = productoPedido
+            detalle.cantidad = int(value['cantidad'])
+            detalle.subtotal = float(value['subtotal'])
+            detalle.save()
+
+
+        # Actualizar pedido
+        nroPedido = 'PED' + nuevoPedido.fecha_registro.strftime('%Y') + str(nuevoPedido.id)
+        nuevoPedido.nro_pedido = nroPedido
+        nuevoPedido.monto_total = montoTotal
+        nuevoPedido.save()
+
+        # Registramos variable de sesion para el pedido
+        request.session['pedidoId'] = nuevoPedido.id
+
+        # Creamos boton de paypal
+        paypal_dict = {
+        "business": settings.PAYPAL_USER_EMAIL,
+        "amount": montoTotal,
+        "item_name": "PEDIDO CODIGO: " + nroPedido,
+        "invoice": nroPedido,
+        "notify_url": request.build_absolute_uri(reverse('paypal-ipn')),
+        "return": request.build_absolute_uri(('/gracias')),
+        "cancel_return": request.build_absolute_uri(('/')), 
+        }
+
+        # Create the instance.
+        formPaypal = PayPalPaymentsForm(initial=paypal_dict)
+
+        context = {
+            'pedido': nuevoPedido,
+            'formPaypal': formPaypal,
+        }
+
+        # Limpiamos el carrito
+        carrito = Cart(request)
+        carrito.clear()
+
+    return render(request, 'compra.html',context)
+
+@login_required(login_url='/login')
+def gracias(request):
+    context = {}
+    paypalId = request.GET.get('PayerID',None)
+
+    if paypalId is not None:
+        pedidoId = request.session.get('pedidoId')
+        pedido = Pedido.objects.get(pk=pedidoId)
+        pedido.estado = '1'
+        pedido.save()
+
+        send_mail(
+            "GRACIAS POR TU COMPRA",
+            "Here is the message." + pedido.nro_pedido,
+            settings.ADMIN_USER_EMAIL,
+            [request.user.email],
+            fail_silently=False,
+        )
+
+        context = {
+            'pedido': pedido,
+        }
+    else:
+        return redirect('/')
+
+    return render(request, 'gracias.html', context)
 

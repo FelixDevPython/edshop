@@ -14,6 +14,7 @@ class ClienteForm(forms.Form):
     email = forms.EmailField(label='Email', required=True)
     direccion = forms.CharField(label='Dirección', widget=forms.Textarea)
     telefono = forms.CharField(label='Teléfono', max_length=20)
+    sexo = forms.ChoiceField(label='Sexo', choices=SEXO_CHOICES)
     fecha_nacimiento = forms.DateField(label='Fecha de Nacimiento', input_formats=['%Y-%m-%d'], widget=DateInput())
 
     
