@@ -1,30 +1,31 @@
-#imagen original
+# Imagen base
 FROM python:3.9.6-alpine
 
-#set work directory
+# Directorio de trabajo
 WORKDIR /usr/src/app
 
-#configurar variables entorno
+# Variables de entorno
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 
+# Dependencias del sistema
 RUN apk add --update --no-cache mariadb-connector-c-dev \
-    && apk add --no-cache --virtual .build-deps \
-    mariadb-dev \
-    gcc \
-    musl-dev \
+    && apk add --no-cache --virtual .build-deps mariadb-dev gcc musl-dev \
     && pip install mysqlclient==1.4.2.post1 \
     && apk del .build-deps \
-    && apk add libffi-dev openssl-dev libgcc
+    && apk add libffi-dev openssl-dev libgcc bash
 
-#instalar dependencias
+# Actualizar pip e instalar dependencias Python
+COPY requirements.txt .
 RUN pip install --upgrade pip
-COPY ./venv/requirements.txt .
 RUN pip install -r requirements.txt
 
-#copiamos todo el proyecto
+# Copiar todo el proyecto
 COPY . .
 
-#CMD python manage.py runserver
+# Exponer el puerto (Render usa 8000 por defecto)
+EXPOSE 8000
 
-#EXPOSE 8000
+# Comando para correr Django con Gunicorn
+CMD ["gunicorn", "edshop.wsgi:application", "--bind", "0.0.0.0:8000"]
+
