@@ -1,10 +1,14 @@
 Django==4.2.10
 mysqlclient==1.4.2.post1
 beautifulsoup4==4.12.3
+blinker==1.7.0
 requests==2.31.0
 Pillow==10.2.0
 pytz==2024.1
 qrcode==7.4.2
 rich==13.7.1
 yt-dlp==2024.4.9
+Markdown==3.5.2
+lxml==5.2.1
+PyYAML==6.0.1
 
